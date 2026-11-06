@@ -201,6 +201,8 @@ async function InitV86Hdd(): Promise<FakeFile> {
 			}
 		},
 		save: async (emulator = anura.x86?.emulator) => {
+			const blockCache = emulator?.disk_images?.hda?.block_cache;
+			if (!blockCache || blockCache.size === 0 || !fakefile.size) return;
 			const part_cache: any = {};
 			for (const [offset, buffer] of emulator.disk_images.hda.block_cache) {
 				const start = offset * BUF_SIZE;
@@ -221,7 +223,7 @@ async function InitV86Hdd(): Promise<FakeFile> {
 									r),
 						)) as any
 					).target.result;
-					tmpb = new Uint8Array(part);
+					tmpb = new Uint8Array(part || new ArrayBuffer(SLICE_SIZE));
 					part_cache[i] = tmpb;
 				}
 				tmpb.set(slice, start % SLICE_SIZE);
@@ -249,6 +251,7 @@ async function InitV86Hdd(): Promise<FakeFile> {
 			}
 
 			const promises = [];
+			if (Object.keys(part_cache).length === 0) return;
 
 			for (const i in part_cache) {
 				promises.push(
@@ -265,7 +268,7 @@ async function InitV86Hdd(): Promise<FakeFile> {
 
 			anura.notifications.add({
 				title: "x86 Subsystem",
-				description: "Saved root filesystem sucessfully",
+				description: "Saved Linux disk changes successfully",
 				timeout: 5000,
 			});
 		},
@@ -357,9 +360,8 @@ class V86Backend {
 			this.virt_hda.save();
 		}, 1000 * 90);
 
-		window.addEventListener("beforeunload", async (event) => {
-			event.preventDefault();
-			await this.virt_hda.save();
+		window.addEventListener("pagehide", () => {
+			void this.virt_hda.save();
 		});
 
 		let data = "";
