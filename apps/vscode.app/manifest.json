@@ -3,7 +3,7 @@
 	"type": "auto",
 	"package": "anura.vscode",
 	"index": "index.html",
-	"icon": "/assets/icons/generic.svg",
+	"icon": "",
 	"wininfo": {
 		"title": "VS Code Workbench",
 		"width": "1050px",
