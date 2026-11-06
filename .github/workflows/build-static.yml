@@ -1,0 +1,61 @@
+name: Build AnuraOS static site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anuraos-static-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential gcc-multilib clang jq uuid-runtime \
+            curl wget git make openjdk-17-jdk binaryen
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown, i686-unknown-linux-gnu
+
+      - name: Install WASM build tools
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.105 --locked
+          cargo install --git https://github.com/r58Playz/wasm-snip --locked
+
+      - name: Build AnuraOS
+        run: make static
+
+      - name: Upload static site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anuraos-static
+          path: static/
+          if-no-files-found: error
+          retention-days: 1
