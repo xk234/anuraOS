@@ -30,7 +30,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential gcc-multilib clang jq uuid-runtime \
-            curl wget git make openjdk-17-jdk binaryen
+            curl wget git make openjdk-17-jdk binaryen docker.io e2fsprogs
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -52,6 +52,12 @@ jobs:
         run: |
           cargo install wasm-bindgen-cli --version 0.2.105 --locked
           cargo install --git https://github.com/r58Playz/wasm-snip --locked
+
+      - name: Build Alpine x86 root filesystem
+        run: |
+          sudo systemctl start docker
+          docker info
+          make rootfs-alpine
 
       - name: Build AnuraOS
         run: make static
