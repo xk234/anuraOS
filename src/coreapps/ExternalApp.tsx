@@ -150,8 +150,8 @@ class ExternalApp extends App {
 					let html = await response.text();
 					const baseHref = appUrl.href.replace(/&/g, "&amp;").replace(/\"/g, "&quot;");
 					const baseTag = "<base href=\"" + baseHref + "\">";
-					if (/<head(?:\\s[^>]*)?>/i.test(html)) html = html.replace(/(<head(?:\\s[^>]*)?>)/i, "$1" + baseTag);
-					else html = html.replace(/<html(?:\\s[^>]*)?>/i, "$&<head>" + baseTag + "</head>");
+					if (/<head(?:\s[^>]*)?>/i.test(html)) html = html.replace(/(<head(?:\s[^>]*)?>)/i, "$1" + baseTag);
+					else html = html.replace(/<html(?:\s[^>]*)?>/i, "$&<head>" + baseTag + "</head>");
 					frameWindow.document.open();
 					frameWindow.document.write(html);
 					frameWindow.document.close();
