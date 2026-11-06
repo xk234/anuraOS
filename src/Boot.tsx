@@ -1,3 +1,5 @@
+const x86TerminalMode = location.pathname.replace(/\/+$/, "") === "/x86";
+
 const channel = new BroadcastChannel("tab");
 
 // send message to all tabs, after a new tab
@@ -465,6 +467,10 @@ window.addEventListener("load", async () => {
 
 document.addEventListener("anura-boot-completed", async () => {
 	AnuradHelpers.setStage("anura.boot");
+	if (x86TerminalMode) {
+		await anura.settings.set("oobe-complete", true);
+		await anura.settings.set("x86-disabled", false);
+	}
 	if (anura.settings.get("oobe-complete")) {
 		document.dispatchEvent(new Event("anura-login-completed"));
 	} else {
@@ -594,6 +600,25 @@ document.addEventListener("anura-login-completed", async () => {
 	// Initializes apps and libs from userApps/ and userLibs/ and runs any user specified init scripts
 	await bootUserCustomizations();
 
+	if (x86TerminalMode && (!anura.x86hdd.size || anura.x86hdd.size < 100 * 1024 * 1024)) {
+		try {
+			const image = anura.config.x86?.[anura.settings.get("x86-image") || "alpine"];
+			if (!image) throw new Error("No x86 Linux image is configured.");
+			const sh = new anura.fs.Shell();
+			await sh.promises.mkdirp("/boot");
+			for (const [url, target] of [[image.bzimage, "/boot/bzimage"], [image.initrd, "/boot/initrd.img"]]) {
+				const response = await fetch(url);
+				if (!response.ok) throw new Error("Missing cached boot asset: " + url + " (HTTP " + response.status + "). Open AnuraOS online once to install the offline image.");
+				await anura.fs.promises.writeFile(target, Filer.Buffer(await response.arrayBuffer()));
+			}
+			if (!Array.isArray(image.rootfs) || !image.rootfs.length) throw new Error("The configured Linux root filesystem is missing.");
+			await anura.x86hdd.loadchunks(image.rootfs.map((url: string) => new URL("/" + url.replace(/^\\/+/, ""), location.origin).href));
+		} catch (error) {
+			anura.notifications.add({ title: "Cannot start /x86 offline", description: String(error), timeout: "never" });
+		}
+	}
+
+	if (x86TerminalMode) await anura.settings.set("x86-disabled", false);
 	if (!anura.settings.get("x86-disabled")) {
 		if (anura.x86hdd.size && anura.x86hdd.size >= 100 * 1024 * 1024) {
 			await bootx86();
@@ -673,6 +698,13 @@ document.addEventListener("anura-login-completed", async () => {
 	}
 });
 async function bootx86() {
+	if (x86TerminalMode) {
+		document.addEventListener("anura-x86-ready", async () => {
+			const terminal = anura.apps["anura.v86-terminal"];
+			if (terminal) await terminal.open();
+			else anura.notifications.add({ title: "x86 terminal missing", description: "The v86 Terminal app was not registered.", timeout: "never" });
+		}, { once: true });
+	}
 	const mgr = new x86MgrApp();
 	await anura.registerApp(mgr);
 
