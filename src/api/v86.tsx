@@ -14,6 +14,7 @@ interface FakeFile {
 	save: (emulator?: any) => Promise<void>;
 	delete: () => Promise<void>;
 	resize: (size: number) => Promise<void>;
+	loadchunks: (urls: string[], onProgress?: (done: number, total: number) => void) => Promise<void>;
 	size: number;
 }
 
@@ -92,6 +93,12 @@ async function InitV86Hdd(): Promise<FakeFile> {
 			return new Blob([buf!]);
 		},
 		loadfile: async (f: File) => {
+			await new Promise<void>((resolve, reject) => {
+				const tx = db.transaction("parts", "readwrite");
+				const request = tx.objectStore("parts").clear();
+				request.onsuccess = () => resolve();
+				request.onerror = () => reject(request.error);
+			});
 			const trn = db.transaction("parts", "readwrite").objectStore("parts");
 			trn.put(f.size, "size");
 			fakefile.size = f.size;
@@ -111,6 +118,51 @@ async function InitV86Hdd(): Promise<FakeFile> {
 				i++;
 
 				console.log(i / (f.size / SLICE_SIZE));
+			}
+		},
+		loadchunks: async (urls: string[], onProgress?: (done: number, total: number) => void) => {
+			// Persist bounded chunks directly to IndexedDB; do not hold the full disk image in RAM.
+			await new Promise<void>((resolve, reject) => {
+				const tx = db.transaction("parts", "readwrite");
+				const request = tx.objectStore("parts").clear();
+				request.onsuccess = () => resolve();
+				request.onerror = () => reject(request.error);
+			});
+			let partIndex = 0;
+			let totalSize = 0;
+			try {
+				for (let index = 0; index < urls.length; index++) {
+					const response = await fetch(urls[index]!);
+					if (!response.ok) throw new Error("Root filesystem chunk " + (index + 1) + "/" + urls.length + " returned HTTP " + response.status + ": " + urls[index]);
+					const blob = await response.blob();
+					totalSize += blob.size;
+					for (let offset = 0; offset < blob.size; offset += SLICE_SIZE) {
+						const part = await blob.slice(offset, offset + SLICE_SIZE).arrayBuffer();
+						await new Promise<void>((resolve, reject) => {
+							const tx = db.transaction("parts", "readwrite");
+							const request = tx.objectStore("parts").put(part, partIndex++);
+							request.onsuccess = () => resolve();
+							request.onerror = () => reject(request.error);
+						});
+					}
+					onProgress?.(index + 1, urls.length);
+				}
+				await new Promise<void>((resolve, reject) => {
+					const tx = db.transaction("parts", "readwrite");
+					const request = tx.objectStore("parts").put(totalSize, "size");
+					request.onsuccess = () => resolve();
+					request.onerror = () => reject(request.error);
+				});
+				fakefile.size = totalSize;
+			} catch (error) {
+				await new Promise<void>((resolve) => {
+					const tx = db.transaction("parts", "readwrite");
+					tx.objectStore("parts").clear();
+					tx.oncomplete = () => resolve();
+					tx.onerror = () => resolve();
+				});
+				fakefile.size = 0;
+				throw error;
 			}
 		},
 		delete: async () => {
