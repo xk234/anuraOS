@@ -1,4 +1,4 @@
-const x86TerminalMode = location.pathname.replace(/\/+$/, "") === "/x86";
+const x86TerminalMode = ["/x86", "/x86.html"].includes(location.pathname.replace(/\/+$/, ""));
 
 const channel = new BroadcastChannel("tab");
 
