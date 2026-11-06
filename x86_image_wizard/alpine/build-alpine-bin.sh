@@ -58,6 +58,10 @@ echo "done! created"
 sudo chown -R $USER:$USER $IMAGES/alpine-boot
 cd "$IMAGES"
 mkdir -p alpine-rootfs
-split -b50M alpine-rootfs.bin alpine-rootfs/
+split -b20M alpine-rootfs.bin alpine-rootfs/
 cd ../
+# Keep every static asset below Cloudflare Pages' per-file upload limit.
+ROOTFS_FILES=$(find x86images/alpine-rootfs -type f | sort | jq -R . | jq -s .)
+jq --argjson rootfs "$ROOTFS_FILES" '.x86.alpine.rootfs = $rootfs' ../config.default.json > ../config.default.json.tmp
+mv ../config.default.json.tmp ../config.default.json
 find x86images/alpine-rootfs/* | jq -Rnc "[inputs]"
