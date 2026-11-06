@@ -186,7 +186,7 @@ milestone:
 commit:
 	git rev-parse HEAD > build/COMMIT
 build/cache-load.json: FORCE
-	(find apps/ -type f && cd build/ && find lib/ -type f && find libs/ -type f && find assets/ -type f && find bundle.css -type f && cd ../public/ && find . -type f)| grep -v -e node_modules -e \.map -e \.d\.ts -e "/\." -e "workbox/" | jq -Rnc '[inputs]' > build/cache-load.json
+	(find apps/ -type f && cd build/ && find x86images/ -type f && find lib/ -type f && find libs/ -type f && find assets/ -type f && find bundle.css -type f && cd ../public/ && find . -type f)| grep -v -e node_modules -e \.map -e \.d\.ts -e "/\." -e "workbox/" | jq -Rnc '[inputs]' > build/cache-load.json
 	
 static: all
 	mkdir -p static/
