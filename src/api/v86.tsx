@@ -434,7 +434,10 @@ class V86Backend {
 		);
 		if (location.pathname.replace(/\/+$/, "") === "/x86") {
 			document.dispatchEvent(new Event("anura-x86-ready"));
-		}pty(
+		}
+	}
+
+	openpty(
 		command: string,
 		cols: number,
 		rows: number,
