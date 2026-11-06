@@ -4,8 +4,8 @@ class OobeView {
 		text: "#202124",
 		step: 0,
 		offlineEnabled: true,
-		v86Enabled: false,
-		localfsdriver: false,
+		v86Enabled: true,
+		localfsdriver: true,
 		dlsize: "0MB",
 	});
 
@@ -310,10 +310,20 @@ class OobeView {
 		</div>
 	);
 
-	nextStep() {
+	async nextStep() {
 		this.state.step++;
 		const step = this.steps[this.state.step]!;
-		if (step.on) step.on();
+		try {
+			if (step.on) await step.on();
+		} catch (error) {
+			console.error("Anura first-run setup failed", error);
+			this.state.step = 1;
+			anura.notifications.add({
+				title: "Setup could not finish",
+				description: String(error),
+				timeout: "never",
+			});
+		}
 	}
 	async complete() {
 		await anura.settings.set("oobe-complete", true);
@@ -331,105 +341,45 @@ class OobeView {
 
 async function installx86(tracker = document.getElementById("tracker")) {
 	console.debug("installing x86");
-	await anura.fs.mkdir("/boot");
-	const x86image = anura.settings.get("x86-image");
-	tracker!.innerText = "Downloading x86 kernel";
-	const bzimage = await fetch(anura.config.x86[x86image].bzimage);
-	anura.fs.writeFile(
-		"/boot/bzimage",
-		Filer.Buffer(await bzimage.arrayBuffer()),
-	);
-	tracker!.innerText = "Downloading x86 initrd";
-	const initrd = await fetch(anura.config.x86[x86image].initrd);
-	anura.fs.writeFile(
-		"/boot/initrd.img",
-		Filer.Buffer(await initrd.arrayBuffer()),
-	);
+	const setProgress = (message: string) => {
+		if (tracker) tracker.textContent = message;
+	};
+	await anura.fs.promises.mkdir("/boot").catch((error: any) => {
+		if (error?.code !== "EEXIST") throw error;
+	});
+	const imageName = anura.settings.get("x86-image");
+	const image = anura.config.x86?.[imageName];
+	if (!image) throw new Error("Unknown x86 image: " + imageName);
 
-	if (typeof anura.config.x86[x86image].rootfs === "string") {
-		const rootfs = await fetch(anura.config.x86[x86image].rootfs);
-		const blob = await rootfs.blob();
-		//@ts-ignore
-		await anura.x86hdd.loadfile(blob);
-	} else if (anura.config.x86[x86image].rootfs) {
-		// TODO: add batching, this will bottleneck and OOM if the rootfs is too large
+	setProgress("Downloading x86 kernel…");
+	const kernelResponse = await fetch(image.bzimage);
+	if (!kernelResponse.ok) throw new Error("Kernel download failed: HTTP " + kernelResponse.status);
+	await anura.fs.promises.writeFile("/boot/bzimage", Filer.Buffer(await kernelResponse.arrayBuffer()));
 
-		console.debug("fetching");
-		// const files = await Promise.all(
-		//     anura.config.x86[x86image].rootfs.map((part: string) => fetch(part)),
-		// );
+	setProgress("Downloading x86 initrd…");
+	const initrdResponse = await fetch(image.initrd);
+	if (!initrdResponse.ok) throw new Error("Initrd download failed: HTTP " + initrdResponse.status);
+	await anura.fs.promises.writeFile("/boot/initrd.img", Filer.Buffer(await initrdResponse.arrayBuffer()));
 
-		const files: Blob[] = [];
-		let limit = 4;
-		let i = 0;
-		let done = false;
-		let doneSoFar = 0;
-		const doWhenAvail = function () {
-			if (limit === 0) return;
-			limit--;
-			const assigned = i;
-			i++;
-
-			fetch(anura.config.x86[x86image].rootfs[assigned])
-				.then(async (response) => {
-					if (response.status !== 200) {
-						console.error("Status code bad on chunk " + assigned);
-						console.error(anura.config.x86[x86image].rootfs[assigned]);
-						console.error("Finished " + doneSoFar + " chunks before error");
-						anura.notifications.add({
-							title: "bad chunk on x86 download",
-							description: `Chunk ${assigned} gave status code ${response.status}\nClick me to reload`,
-							timeout: 50000,
-							callback: () => {
-								location.reload();
-							},
-						});
-						return;
-					}
-					files[assigned] = await response.blob();
-					limit++;
-					doneSoFar++;
-					tracker!.innerHTML = `Downloading x86 rootfs. Chunk ${doneSoFar}/${anura.config.x86[x86image].rootfs.length} done`;
-					if (i < anura.config.x86[x86image].rootfs.length) {
-						doWhenAvail();
-					}
-					if (doneSoFar === anura.config.x86[x86image].rootfs.length) {
-						done = true;
-					}
-					console.debug(
-						anura.config.x86[x86image].rootfs.length -
-							doneSoFar +
-							" chunks to go",
-					);
-				})
-
-				.catch((e) => {
-					console.error("Error on chunk " + assigned);
-					anura.notifications.add({
-						title: "bad chunk on x86 download",
-						description: `Chunk ${assigned} had a download error ${e}\nClick me to reload`,
-						timeout: 50000,
-						callback: () => {
-							location.reload();
-						},
-					});
-				}); // Peak error handling right there
-		};
-		doWhenAvail();
-		doWhenAvail();
-		doWhenAvail();
-		doWhenAvail();
-		while (!done) {
-			await sleep(200);
-		}
-
-		console.debug("constructing blobs...");
-		tracker!.innerText = "Concatenating and installing x86 rootfs";
-		//@ts-ignore
-		await anura.x86hdd.loadfile(new Blob(files));
+	if (typeof image.rootfs === "string") {
+		setProgress("Downloading Linux root filesystem…");
+		const response = await fetch(image.rootfs);
+		if (!response.ok) throw new Error("Root filesystem download failed: HTTP " + response.status);
+		await anura.x86hdd.loadfile(await response.blob() as File);
+	} else if (Array.isArray(image.rootfs) && image.rootfs.length > 0) {
+		setProgress("Installing Linux disk image (this can take a while)…");
+		await anura.x86hdd.loadchunks(image.rootfs, (done, total) => {
+			setProgress("Installing Linux disk image: chunk " + done + "/" + total);
+		});
+	} else {
+		throw new Error("No root filesystem image is configured for " + imageName);
 	}
 
-	console.debug("done");
+	if (!anura.x86hdd.size || anura.x86hdd.size < 100 * 1024 * 1024) {
+		throw new Error("The downloaded Linux disk image is missing or unexpectedly small (" + (anura.x86hdd.size || 0) + " bytes).");
+	}
+	setProgress("Linux disk installed (" + Math.round(anura.x86hdd.size / 1024 / 1024) + " MB).");
+	console.debug("x86 installation complete", anura.x86hdd.size);
 }
 
 async function preloadFiles(tracker = document.getElementById("tracker")) {
