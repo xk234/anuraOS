@@ -93,189 +93,95 @@ class ExternalApp extends App {
 	async open(args: string[] = []): Promise<WMWindow | undefined> {
 		if (this.manifest.type === "auto") {
 			const win = anura.wm.create(this, this.manifest.wininfo);
-
 			const iframe = document.createElement("iframe");
-			// CSS injection here but it's no big deal
 			const bg = this.manifest.background || "var(--theme-bg)";
-			iframe.setAttribute(
-				"style",
-				"top:0; left:0; bottom:0; right:0; width:100%; height:100%; " +
-					`border: none; margin: 0; padding: 0; background-color: ${bg};`,
-			);
-			iframe.setAttribute(
-				"src",
-				`${this.source}/${this.manifest.index}${this.manifest.index?.includes("?") ? "&" : "?"}args=${ExternalApp.serializeArgs(args)}`,
-			);
+			iframe.setAttribute("style", "top:0; left:0; bottom:0; right:0; width:100%; height:100%; border:none; margin:0; padding:0; background-color:" + bg + ";");
+			iframe.id = "proc-" + win.pid;
+			iframe.src = "about:blank?args=" + ExternalApp.serializeArgs(args);
 			win.content.appendChild(iframe);
-			iframe.id = `proc-${win.pid}`;
 
-			if (this.manifest.useIdbWrapper) {
-				const idbWrapper = new Proxy(iframe.contentWindow!.indexedDB, {
-					get: (target, prop, receiver) => {
-						switch (prop) {
-							case "databases":
-								return async () => {
-									const dbs = await target.databases();
-									return dbs
-										.filter((db: any) => db.name.startsWith(this.package + "-"))
-										.map((db: any) => {
-											db.name = db.name.slice(this.package.length + 1);
-											return db;
-										});
-								};
-							case "open":
-								return (name: string, version: number) => {
-									return target.open(
-										name.startsWith(this.package + "-")
-											? name
-											: `${this.package}-${name}`,
-										version,
-									);
-								};
-							case "deleteDatabase":
-								return (name: string) => {
-									return target.deleteDatabase(
-										name.startsWith(this.package + "-")
-											? name
-											: `${this.package}-${name}`,
-									);
-								};
-							default:
-								return Reflect.get(target, prop, receiver);
-						}
-					},
-				});
-				Object.defineProperty(iframe.contentWindow!, "indexedDB", {
-					value: idbWrapper,
-					writable: false,
+			const frameWindow = iframe.contentWindow!;
+			const sourceRoot = new URL(this.source.endsWith("/") ? this.source : this.source + "/", location.href);
+			const appUrl = new URL(this.manifest.index || "index.html", sourceRoot);
+			appUrl.searchParams.set("args", ExternalApp.serializeArgs(args));
+			const sameOrigin = appUrl.origin === location.origin;
+
+			if (sameOrigin) {
+				if (this.manifest.useIdbWrapper) {
+					const idbWrapper = new Proxy(frameWindow.indexedDB, {
+						get: (target, prop, receiver) => {
+							switch (prop) {
+								case "databases": return async () => (await target.databases()).filter((db: any) => db.name.startsWith(this.package + "-")).map((db: any) => ({ ...db, name: db.name.slice(this.package.length + 1) }));
+								case "open": return (name: string, version?: number) => target.open(name.startsWith(this.package + "-") ? name : this.package + "-" + name, version);
+								case "deleteDatabase": return (name: string) => target.deleteDatabase(name.startsWith(this.package + "-") ? name : this.package + "-" + name);
+								default: return Reflect.get(target, prop, receiver);
+							}
+						},
+					});
+					Object.defineProperty(frameWindow, "indexedDB", { value: idbWrapper, writable: false });
+				}
+				Object.assign(frameWindow as any, {
+					anura, AliceWM, ExternalApp, LocalFS, instance: this, instanceWindow: win,
+					print: (message: string) => frameWindow.postMessage({ type: "stdout", message }),
+					println: (message: string) => frameWindow.postMessage({ type: "stdout", message: message + "\n" }),
+					printerr: (message: string) => frameWindow.postMessage({ type: "stderr", message }),
+					printlnerr: (message: string) => frameWindow.postMessage({ type: "stderr", message: message + "\n" }),
+					read: () => new Promise((resolve) => frameWindow.addEventListener("message", (event) => { if (event.data?.type === "stdin") resolve(event.data.message); }, { once: true })),
+					readln: () => new Promise((resolve) => { let buffer = ""; const listener = (event: MessageEvent<any>) => { if (event.data?.type === "stdin") { buffer += event.data.message; if (buffer.includes("\n")) { resolve(buffer); frameWindow.removeEventListener("message", listener); } } }; frameWindow.addEventListener("message", listener); }),
+					env: { process: win },
+					open: async (url: string | URL) => { const browser = await anura.import("anura.libbrowser"); browser.openTab(url); },
 				});
 			}
 
-			Object.assign(iframe.contentWindow as any, {
-				anura,
-				AliceWM,
-				ExternalApp,
-				LocalFS,
-				instance: this,
-				instanceWindow: win,
-				print: (message: string) => {
-					iframe.contentWindow!.window.postMessage({
-						type: "stdout",
-						message,
-					});
-				},
-				println: (message: string) => {
-					iframe.contentWindow!.postMessage({
-						type: "stdout",
-						message: message + "\n",
-					});
-				},
-				printerr: (message: string) => {
-					iframe.contentWindow!.postMessage({
-						type: "stderr",
-						message,
-					});
-				},
-				printlnerr: (message: string) => {
-					iframe.contentWindow!.postMessage({
-						type: "stderr",
-						message: message + "\n",
-					});
-				},
-				read: () => {
-					return new Promise((resolve) => {
-						iframe.contentWindow!.addEventListener(
-							"message",
-							(e) => {
-								if (e.data.type === "stdin") {
-									resolve(e.data.message);
-								}
-							},
-							{ once: true },
-						);
-					});
-				},
-				readln: () => {
-					return new Promise((resolve) => {
-						// Read until a newline
-						let buffer = "";
-						const listener = (e: MessageEvent<any>) => {
-							if (e.data.type === "stdin") {
-								buffer += e.data.message;
-								if (buffer.includes("\n")) {
-									resolve(buffer);
-									iframe.contentWindow!.removeEventListener(
-										"message",
-										listener,
-									);
-								}
-							}
-						};
-						iframe.contentWindow!.addEventListener("message", listener);
-					});
-				},
-				env: {
-					process: win,
-				},
-				open: async (url: string | URL) => {
-					const browser = await anura.import("anura.libbrowser");
-					browser.openTab(url);
-				},
-			});
+			win.stdin = new WritableStream({ write: (message) => frameWindow.postMessage({ type: "stdin", message }) });
+			win.stderr = new ReadableStream({ start: (controller) => {
+				frameWindow.addEventListener("error", (event: ErrorEvent) => controller.enqueue(event.error || event.message));
+				frameWindow.addEventListener("message", (event) => { if (event.data?.type === "stderr") controller.enqueue(event.data.message); });
+			} });
+			win.stdout = new ReadableStream({ start: (controller) => frameWindow.addEventListener("message", (event) => { if (event.data?.type === "stdout") controller.enqueue(event.data.message); }) });
 
-			win.stdin = new WritableStream({
-				write: (message) => {
-					iframe.contentWindow!.postMessage({
-						type: "stdin",
-						message,
-					});
-				},
-			});
-
-			win.stderr = new ReadableStream({
-				start: (controller) => {
-					iframe.contentWindow!.addEventListener("error", (e) => {
-						controller.enqueue(e.error);
-					});
-
-					iframe.contentWindow!.addEventListener("message", (e) => {
-						if (e.data.type === "stderr") {
-							controller.enqueue(e.data.message);
-						}
-					});
-				},
-			});
-
-			win.stdout = new ReadableStream({
-				start: (controller) => {
-					iframe.contentWindow!.addEventListener("message", (e) => {
-						if (e.data.type === "stdout") {
-							controller.enqueue(e.data.message);
-						}
-					});
-				},
-			});
-
-			const matter = document.createElement("link");
-			matter.setAttribute("rel", "stylesheet");
-			matter.setAttribute("href", "/assets/matter.css");
-
-			iframe.contentWindow!.addEventListener("load", () => {
-				iframe.contentDocument!.head.appendChild(matter);
-			});
-
+			if (sameOrigin) {
+				// Assigning src before injecting globals navigated away from about:blank and
+				// silently discarded every injected API. Fetch + document.write keeps the
+				// same Window object, so app scripts see Anura's APIs from their first line.
+				try {
+					const response = await fetch(appUrl);
+					if (!response.ok) throw new Error("App page returned HTTP " + response.status + " (" + appUrl.href + ")");
+					let html = await response.text();
+					const baseHref = appUrl.href.replace(/&/g, "&amp;").replace(/\"/g, "&quot;");
+					const baseTag = "<base href=\"" + baseHref + "\">";
+					if (/<head(?:\\s[^>]*)?>/i.test(html)) html = html.replace(/(<head(?:\\s[^>]*)?>)/i, "$1" + baseTag);
+					else html = html.replace(/<html(?:\\s[^>]*)?>/i, "$&<head>" + baseTag + "</head>");
+					frameWindow.document.open();
+					frameWindow.document.write(html);
+					frameWindow.document.close();
+					const matter = frameWindow.document.createElement("link");
+					matter.rel = "stylesheet";
+					matter.href = "/assets/matter.css";
+					frameWindow.document.head?.appendChild(matter);
+				} catch (error) {
+					console.error("Failed to load Anura app " + this.package, error);
+					frameWindow.document.open();
+					frameWindow.document.write("<!doctype html><html><body style='background:#171717;color:#eee;font:14px sans-serif;padding:20px'></body></html>");
+					frameWindow.document.close();
+					const message = frameWindow.document.createElement("pre");
+					message.textContent = "Unable to open " + this.name + ": " + String(error);
+					frameWindow.document.body.appendChild(message);
+				}
+			} else {
+				// Cross-origin apps cannot receive parent-window APIs; load them normally.
+				iframe.src = appUrl.href;
+			}
 			return win;
 		} else if (this.manifest.type === "manual") {
-			// This type of application is reserved only for scripts meant for hacking anura internals
-			const req = await fetch(`${this.source}/${this.manifest.handler}`);
+			const req = await fetch(this.source + "/" + this.manifest.handler);
+			if (!req.ok) throw new Error("App handler returned HTTP " + req.status);
 			const data = await req.text();
 			top!.window.eval(data);
 			// @ts-ignore
 			loadingScript(this.source, this);
-
 			taskbar.updateTaskbar();
 			alttab.update();
-
 			return;
 		}
 	}
