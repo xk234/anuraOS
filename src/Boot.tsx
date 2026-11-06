@@ -701,8 +701,16 @@ async function bootx86() {
 	if (x86TerminalMode) {
 		document.addEventListener("anura-x86-ready", async () => {
 			const terminal = anura.apps["anura.v86-terminal"];
-			if (terminal) await terminal.open();
-			else anura.notifications.add({ title: "x86 terminal missing", description: "The v86 Terminal app was not registered.", timeout: "never" });
+			if (terminal) {
+				await terminal.open();
+				launcher.element.remove();
+				taskbar.element.remove();
+				quickSettings.quickSettingsElement.remove();
+				calendar.element.remove();
+				document.body.style.background = "#05070b";
+			} else {
+				anura.notifications.add({ title: "x86 terminal missing", description: "The v86 Terminal app was not registered.", timeout: "never" });
+			}
 		}, { once: true });
 	}
 	const mgr = new x86MgrApp();
