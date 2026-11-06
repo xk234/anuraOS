@@ -11,6 +11,7 @@ const BUF_SIZE = 256;
 
 interface FakeFile {
 	slice: (start: number, end: number) => Promise<Blob>;
+	loadfile: (file: File) => Promise<void>;
 	save: (emulator?: any) => Promise<void>;
 	delete: () => Promise<void>;
 	resize: (size: number) => Promise<void>;
