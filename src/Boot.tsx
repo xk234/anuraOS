@@ -595,7 +595,18 @@ document.addEventListener("anura-login-completed", async () => {
 	await bootUserCustomizations();
 
 	if (!anura.settings.get("x86-disabled")) {
-		await bootx86();
+		if (anura.x86hdd.size && anura.x86hdd.size >= 100 * 1024 * 1024) {
+			await bootx86();
+		} else {
+			// Never start v86 with an empty/placeholder IndexedDB disk. The old
+			// behavior made an uninstalled 1 MB disk look like a boot attempt.
+			await anura.settings.set("x86-disabled", true);
+			anura.notifications.add({
+				title: "Linux subsystem is not installed",
+				description: "The saved x86 disk is missing or incomplete. Install the Linux subsystem from Settings before starting it.",
+				timeout: 10000,
+			});
+		}
 	}
 
 	if (anura.settings.get("kiosk-mode")) {
