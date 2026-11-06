@@ -612,7 +612,7 @@ document.addEventListener("anura-login-completed", async () => {
 				await anura.fs.promises.writeFile(target, Filer.Buffer(await response.arrayBuffer()));
 			}
 			if (!Array.isArray(image.rootfs) || !image.rootfs.length) throw new Error("The configured Linux root filesystem is missing.");
-			await anura.x86hdd.loadchunks(image.rootfs.map((url: string) => new URL("/" + url.replace(/^\\/+/, ""), location.origin).href));
+			await anura.x86hdd.loadchunks(image.rootfs.map((url: string) => new URL("/" + url.replace(/^\/+/, ""), location.origin).href));
 		} catch (error) {
 			anura.notifications.add({ title: "Cannot start /x86 offline", description: String(error), timeout: "never" });
 		}
