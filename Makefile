@@ -33,7 +33,7 @@ build/bootstrap: package.json server/package.json
 #   build/libs/<libname>/<bundle>.min.js.map
 #   build/libs/<libname>/version (contains version number as JSON string, e.g. "1.2.3")
 
-external-libs: build/libs/webdav/version build/libs/workbox/version build/libs/mime/mime.iife.js build/libs/idb-keyval/idb-keyval.js build/libs/comlink/comlink.min.mjs build/assets/matter.css build/libs/dreamland/all.js build/libs/filer/filer.min.js build/libs/nfsadapter/nfsadapter.js build/libs/fflate/browser.js build/libs/libcurl/version bin/chimerix.ajs
+external-libs: build/libs/webdav/version build/libs/workbox/version build/libs/mime/mime.iife.js build/libs/idb-keyval/idb-keyval.js build/libs/comlink/comlink.min.mjs build/assets/matter.css build/libs/dreamland/all.js build/libs/filer/filer.min.js build/libs/nfsadapter/nfsadapter.js build/libs/fflate/browser.js build/libs/libcurl/version build/libs/monaco-editor/min/vs/loader.js bin/chimerix.ajs
 	mkdir -p build/libs/
 	
 build/libs/workbox/version: build/bootstrap
@@ -101,6 +101,11 @@ build/libs/libcurl/version: build/bootstrap
 	cp node_modules/libcurl.js/libcurl.mjs build/libs/libcurl/libcurl.mjs
 	cp node_modules/libcurl.js/libcurl.wasm build/libs/libcurl/libcurl.wasm
 	jq '.version' node_modules/libcurl.js/package.json > build/libs/libcurl/version
+
+build/libs/monaco-editor/min/vs/loader.js: external/anura-browserjs/packages/chrome/package.json
+	cd external/anura-browserjs; pnpm i
+	mkdir -p build/libs/monaco-editor
+	cp -r external/anura-browserjs/packages/chrome/node_modules/monaco-editor/min build/libs/monaco-editor/
 	
 # v86 imports
 external/v86/src/rust/gen/jit.rs: 

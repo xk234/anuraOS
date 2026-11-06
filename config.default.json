@@ -3,7 +3,8 @@
 		"apps/fsapp.app",
 		"apps/marketplace.app",
 		"apps/ashell.app",
-		"apps/v86-terminal.app"
+		"apps/v86-terminal.app",
+		"apps/vscode.app"
 	],
 	"libs": [
 		"/apps/libfileview.lib",
@@ -20,7 +21,12 @@
 	],
 	"defaultsettings": {
 		"use-sw-cache": false,
-		"applist": ["anura.browser", "anura.settings", "anura.fsapp"],
+		"applist": [
+			"anura.browser",
+			"anura.settings",
+			"anura.fsapp",
+			"anura.vscode"
+		],
 		"clampWindows": true,
 		"launcher-keybind": true,
 		"relay-url": "wss://relay.widgetry.org/"

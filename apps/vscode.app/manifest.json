@@ -1,0 +1,12 @@
+{
+	"name": "VS Code Workbench",
+	"type": "auto",
+	"package": "anura.vscode",
+	"index": "index.html",
+	"icon": "/assets/icons/generic.svg",
+	"wininfo": {
+		"title": "VS Code Workbench",
+		"width": "1050px",
+		"height": "680px"
+	}
+}
