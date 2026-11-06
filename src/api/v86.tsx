@@ -401,24 +401,26 @@ class V86Backend {
 			timeout: 5000,
 		});
 
-		this.xpty = await this.openpty(
-			"/bin/ash -c 'startx /bin/xfrog'",
-			1,
-			1,
-			async (data) => {
-				console.debug("XFROG " + data);
-				if (data.includes("XFROG-INIT")) {
-					anura.apps["anura.xfrog"].startup();
-					this.startMouseDriver();
-					anura.notifications.add({
-						title: "x86 Subsystem",
-						description: "Started XFrog Window Manager",
-						timeout: 5000,
-					});
-				}
-			},
-		);
-
+		if (location.pathname.replace(/\/+$/, "") !== "/x86") {
+			this.xpty = await this.openpty(
+				"/bin/ash -c 'startx /bin/xfrog'",
+				1,
+				1,
+				async (data) => {
+					console.debug("XFROG " + data);
+					if (data.includes("XFROG-INIT")) {
+						anura.apps["anura.xfrog"].startup();
+						this.startMouseDriver();
+						anura.notifications.add({
+							title: "x86 Subsystem",
+							description: "Started XFrog Window Manager",
+							timeout: 5000,
+						});
+					}
+				},
+			);
+	
+		}
 		this.runpty = await this.openpty("/bin/bash --login", 1, 1, (data) => {
 			console.debug("RUNPTY" + data);
 		});
@@ -430,9 +432,9 @@ class V86Backend {
 			(parsed) =>
 				new this.v86InternalTCPSocket(parsed.hostname, parsed.port, true),
 		);
-	}
-
-	openpty(
+		if (location.pathname.replace(/\/+$/, "") === "/x86") {
+			document.dispatchEvent(new Event("anura-x86-ready"));
+		}pty(
 		command: string,
 		cols: number,
 		rows: number,
