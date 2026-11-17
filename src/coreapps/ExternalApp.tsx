@@ -148,7 +148,7 @@ class ExternalApp extends App {
 					const response = await fetch(appUrl);
 					if (!response.ok) throw new Error("App page returned HTTP " + response.status + " (" + appUrl.href + ")");
 					let html = await response.text();
-					const baseHref = appUrl.href.replace(/&/g, "&amp;").replace(/\"/g, "&quot;");
+					const baseHref = appUrl.href.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 					const baseTag = "<base href=\"" + baseHref + "\">";
 					if (/<head(?:\s[^>]*)?>/i.test(html)) html = html.replace(/(<head(?:\s[^>]*)?>)/i, "$1" + baseTag);
 					else html = html.replace(/<html(?:\s[^>]*)?>/i, "$&<head>" + baseTag + "</head>");
