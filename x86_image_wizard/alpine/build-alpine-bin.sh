@@ -59,6 +59,8 @@ sudo chown -R $USER:$USER $IMAGES/alpine-boot
 cd "$IMAGES"
 mkdir -p alpine-rootfs
 split -b20M alpine-rootfs.bin alpine-rootfs/
+# The browser loads these chunks; keep the 1 GiB source disk out of the Pages upload.
+rm -f alpine-rootfs.bin
 cd ../
 # Keep every static asset below Cloudflare Pages' per-file upload limit.
 ROOTFS_FILES=$(find x86images/alpine-rootfs -type f | sort | jq -R . | jq -s .)

@@ -57,6 +57,8 @@ jobs:
         run: |
           docker info
           make rootfs-alpine
+          # The rootfs builder updates config.default.json with the generated chunk list.
+          cp config.default.json public/config.json
 
       - name: Build AnuraOS
         run: make static
@@ -65,6 +67,11 @@ jobs:
         run: |
           test -d static
           test -f static/index.html
+          test ! -e static/x86images/alpine-rootfs.bin
+          if find static/x86images/alpine-rootfs -type f -size +25M -print -quit | grep -q .; then
+            echo "::error::An Alpine rootfs chunk exceeds Cloudflare Pages' 25 MiB file limit."
+            exit 1
+          fi
           echo "Generated static site:"
           du -sh static
           find static -maxdepth 2 -type f | head -40
